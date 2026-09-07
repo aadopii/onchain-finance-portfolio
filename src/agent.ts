@@ -1120,7 +1120,8 @@ async function completePendingMints(ctx: AgentContext, cfg: PortfolioConfig): Pr
       const m = json.messages?.[0];
       // Iris answers with the literal string "PENDING" (not empty) until the attestation is
       // signed. Only a hex signature is usable — anything else means wait for the next tick.
-      const isHex = (v: unknown): v is string => typeof v === "string" && /^0x[0-9a-fA-F]+$/.test(v);
+      const isHex = (v: unknown): v is string =>
+        typeof v === "string" && /^0x[0-9a-fA-F]+$/.test(v);
       const msgHex = m?.message;
       const attHex = m?.attestation;
       if (!isHex(msgHex) || !isHex(attHex)) {
