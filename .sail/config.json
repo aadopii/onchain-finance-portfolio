@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "name": "onchain_finance_portfolio",
+  "chainId": 8453,
+  "stateDir": ".sail/state",
+  "createdAt": "2026-09-01T16:26:14.193Z",
+  "contracts": {
+    "kernel": "",
+    "mandateFactory": ""
+  },
+  "installMode": "local"
+}

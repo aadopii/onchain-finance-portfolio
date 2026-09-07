@@ -1,0 +1,22 @@
+{
+  "name": "Onchain Finance Portfolio",
+  "slug": "onchain-finance-portfolio",
+  "summary": "Hold the companies whose product is money \u2014 exchange, credit, yield and privacy \u2014 rebalanced across Base and Ethereum",
+  "description": "A weighted basket of six onchain finance protocols: HYPE and UNI (exchange), AAVE and MORPHO (credit), SKY (yield) and ZAMA (privacy). Deposit USDC on Base; the agent invests it across the basket, bridges USDC to Ethereum for the assets that live there, and rebalances toward the target weights. The thesis and the fundamentals behind each position are in the README.",
+  "strategy": "Invest every USDC deposit in proportion to fixed target weights (cbHYPE 25%, UNI 17.5%, AAVE 17.5%, MORPHO 17.5%, SKY 17.5%, ZAMA 5%). Trim any holding more than 3pp over target weekly; buy under-target holdings with idle USDC in basket order; pool cross-chain shortfalls into one CCTP bridge per run and complete the mint on the destination. A scheduled run keeps ticking until the portfolio is settled.",
+  "mandate": "ExactInputSwapPermission (Uniswap V3 / Aerodrome, USDC in and basket tokens out and back, recipient pinned to the Safe, 1,000 USDC per buy), BoundedErc20Approve (approve only, basket tokens and USDC, routers and CCTP messenger), and CctpBridgePermission (USDC only, 1,000 USDC per tx, Base and Ethereum, mint recipient pinned to the Safe).",
+  "chains": [
+    8453,
+    1
+  ],
+  "tags": [
+    "portfolio",
+    "onchain-finance",
+    "defi",
+    "rebalance",
+    "multi-chain",
+    "thesis"
+  ],
+  "author": "aadopico",
+  "sailorVersion": "2.2.0"
+}
