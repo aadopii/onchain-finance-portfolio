@@ -1,0 +1,143 @@
+{
+  "chains": [
+    8453,
+    1
+  ],
+  "settlement": {
+    "8453": {
+      "symbol": "USDC",
+      "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "decimals": 6
+    },
+    "1": {
+      "symbol": "USDC",
+      "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "decimals": 6
+    }
+  },
+  "router": {
+    "8453": "0x2626664c2603336E57B271c5C0b26F421741e481",
+    "1": "0xE592427A0AEce92De3Edee1F18E0157C05861564"
+  },
+  "quoter": {
+    "8453": "0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a",
+    "1": "0x61fFE014bA17989E743c5F6cB21bF9697530B21e"
+  },
+  "aerodrome": {
+    "router": {
+      "8453": "0x698Cb2b6dd822994581fEa6eA4Fc755d1363A92F"
+    },
+    "quoter": {
+      "8453": "0xCd2A7D98e82D6107eac1828ce8DeAA6acB65b555"
+    }
+  },
+  "bridge": {
+    "messenger": {
+      "8453": "0x1682Ae6375C4E4A97e4B583BC394c861A46D8962",
+      "1": "0xBd3fa81B58Ba92a82136038B25aDec7066af3155"
+    },
+    "transmitter": {
+      "8453": "0xAD09780d193884d503182aD4588450C416D6F9D4",
+      "1": "0x0a992d191DEeC32aFe36203Ad87D7d289a738F81"
+    },
+    "permission": {
+      "8453": "0xa94FD4d9D0bB2bF6C358f7763743B868B6CD7018",
+      "1": "0x7A8a4ac51052fF00B84D77D18398077Fb1C60b4d"
+    },
+    "domains": {
+      "8453": 6,
+      "1": 0
+    },
+    "maxPerTxUsd": 1000
+  },
+  "basket": [
+    {
+      "symbol": "ZAMA",
+      "weight": 0.05,
+      "chains": [
+        {
+          "chainId": 1,
+          "address": "0xa12cc123ba206d4031d1c7f6223d1c2ec249f4f3",
+          "decimals": 18,
+          "feeTier": 500,
+          "via": {
+            "address": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+            "feeTier": 500
+          }
+        }
+      ]
+    },
+    {
+      "symbol": "cbHYPE",
+      "weight": 0.25,
+      "chains": [
+        {
+          "chainId": 8453,
+          "address": "0xB200000000000000000000451d033a5000cb479e",
+          "decimals": 18,
+          "dex": "aerodrome",
+          "tickSpacing": 200
+        }
+      ]
+    },
+    {
+      "symbol": "UNI",
+      "weight": 0.175,
+      "chains": [
+        {
+          "chainId": 8453,
+          "address": "0xc3de830ea07524a0761646a6a4e4be0e114a3c83",
+          "decimals": 18,
+          "feeTier": 10000
+        }
+      ]
+    },
+    {
+      "symbol": "AAVE",
+      "weight": 0.175,
+      "chains": [
+        {
+          "chainId": 8453,
+          "address": "0x63706e401c06ac8513145b7687a14804d17f814b",
+          "decimals": 18,
+          "feeTier": 3000
+        }
+      ]
+    },
+    {
+      "symbol": "MORPHO",
+      "weight": 0.175,
+      "chains": [
+        {
+          "chainId": 8453,
+          "address": "0xbaa5cc21fd487b8fcc2f632f3f4e8d37262a0842",
+          "decimals": 18,
+          "feeTier": 10000
+        }
+      ]
+    },
+    {
+      "symbol": "SKY",
+      "weight": 0.175,
+      "chains": [
+        {
+          "chainId": 1,
+          "address": "0x56072C95FAA701256059aa122697B133aDEd9279",
+          "decimals": 18,
+          "feeTier": 3000,
+          "via": {
+            "address": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+            "feeTier": 500
+          }
+        }
+      ]
+    }
+  ],
+  "rebalanceBandBps": 300,
+  "rebalancePeriodSec": 604800,
+  "maxSlippageBps": 100,
+  "report": {
+    "cadenceSec": 604800,
+    "channel": "telegram"
+  }
+}
