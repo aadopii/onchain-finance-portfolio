@@ -1,7 +1,8 @@
 {
   "chains": [
     8453,
-    1
+    1,
+    4663
   ],
   "settlement": {
     "8453": {
@@ -13,15 +14,22 @@
       "symbol": "USDC",
       "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
       "decimals": 6
+    },
+    "4663": {
+      "symbol": "USDG",
+      "address": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
+      "decimals": 6
     }
   },
   "router": {
     "8453": "0x2626664c2603336E57B271c5C0b26F421741e481",
-    "1": "0xE592427A0AEce92De3Edee1F18E0157C05861564"
+    "1": "0xE592427A0AEce92De3Edee1F18E0157C05861564",
+    "4663": "0xcaf681a66d020601342297493863e78c959e5cb2"
   },
   "quoter": {
     "8453": "0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a",
-    "1": "0x61fFE014bA17989E743c5F6cB21bF9697530B21e"
+    "1": "0x61fFE014bA17989E743c5F6cB21bF9697530B21e",
+    "4663": "0x33e885ed0ec9bf04ecfb19341582aadcb4c8a9e7"
   },
   "aerodrome": {
     "router": {
@@ -48,12 +56,48 @@
       "8453": 6,
       "1": 0
     },
-    "maxPerTxUsd": 1000
+    "maxPerTxUsd": 1000,
+    "across": {
+      "routes": [
+        {
+          "source": 8453,
+          "dest": 4663,
+          "spokePool": "0x09aea4b2242abC8bb4BB78D537A67a245A7bEC64",
+          "destinationSpokePool": "0xD29C85F15DF544bA632C9E25829fd29d767d7978",
+          "inputToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+          "outputToken": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
+          "maxFeeBps": 30,
+          "fillDeadlineSec": 7200
+        },
+        {
+          "source": 4663,
+          "dest": 8453,
+          "spokePool": "0xD29C85F15DF544bA632C9E25829fd29d767d7978",
+          "destinationSpokePool": "0x09aea4b2242abC8bb4BB78D537A67a245A7bEC64",
+          "inputToken": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
+          "outputToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+          "maxFeeBps": 30,
+          "fillDeadlineSec": 7200
+        }
+      ]
+    }
   },
   "basket": [
     {
+      "symbol": "CRCL",
+      "weight": 0.2,
+      "chains": [
+        {
+          "chainId": 4663,
+          "address": "0xdF0992E440dD0be65BD8439b609d6D4366bf1CB5",
+          "decimals": 18,
+          "feeTier": 3000
+        }
+      ]
+    },
+    {
       "symbol": "ZAMA",
-      "weight": 0.05,
+      "weight": 0.04,
       "chains": [
         {
           "chainId": 1,
@@ -69,7 +113,7 @@
     },
     {
       "symbol": "cbHYPE",
-      "weight": 0.25,
+      "weight": 0.2,
       "chains": [
         {
           "chainId": 8453,
@@ -82,7 +126,7 @@
     },
     {
       "symbol": "UNI",
-      "weight": 0.175,
+      "weight": 0.14,
       "chains": [
         {
           "chainId": 8453,
@@ -94,7 +138,7 @@
     },
     {
       "symbol": "AAVE",
-      "weight": 0.175,
+      "weight": 0.14,
       "chains": [
         {
           "chainId": 8453,
@@ -106,7 +150,7 @@
     },
     {
       "symbol": "MORPHO",
-      "weight": 0.175,
+      "weight": 0.14,
       "chains": [
         {
           "chainId": 8453,
@@ -118,7 +162,7 @@
     },
     {
       "symbol": "SKY",
-      "weight": 0.175,
+      "weight": 0.14,
       "chains": [
         {
           "chainId": 1,

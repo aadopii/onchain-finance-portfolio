@@ -27,6 +27,11 @@ const ZAMA = "0xa12cc123ba206d4031d1c7f6223d1c2ec249f4f3"; // v3
 const USDT = "0xdAC17F958D2ee523a2206206994597C13D831ec7"; // hub only — never approved by the agent
 const ROUTER_CLASSIC = "0xE592427A0AEce92De3Edee1F18E0157C05861564"; // classic SwapRouter (two-hop)
 const MESSENGER_ETH = "0xBd3fa81B58Ba92a82136038B25aDec7066af3155";
+const SPOKE_BASE = "0x09aea4b2242abC8bb4BB78D537A67a245A7bEC64"; // Across SpokePool (v3 approve set)
+const SPOKE_RH = "0xD29C85F15DF544bA632C9E25829fd29d767d7978";
+const ROUTER_RH = "0xcaf681a66d020601342297493863e78c959e5cb2";
+const USDG_RH = "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168";
+const CRCL_RH = "0xdF0992E440dD0be65BD8439b609d6D4366bf1CB5";
 
 const WETH = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
 const RANDOM = "0x1111111111111111111111111111111111111111";
@@ -91,3 +96,25 @@ e3("approve ZAMA to random spender", ZAMA, approve(RANDOM, 1000n * 10n ** 18n), 
 e3("approve USDT (hub, not allowlisted)", USDT, approve(ROUTER_CLASSIC, 500_000_000), "fail");
 writeFileSync(".sail/probes-approve-eth-v3.json", JSON.stringify(eth3, null, 2));
 console.log("wrote .sail/probes-approve-eth-v3.json (" + eth3.length + " probes)");
+
+// ── Base approve v3: the v2 set plus the Across SpokePool as a spender ────────────────────────
+const base3 = [...base];
+base3.push({ label: "approve USDC to Across SpokePool (v3)", target: USDC_BASE, calldata: approve(SPOKE_BASE, 500_000_000), value: "0", expect: "pass" });
+base3.push({ label: "approve cbHYPE to Across SpokePool (never bridged — but the token is allowlisted, spender is)", target: CBHYPE, calldata: approve(SPOKE_BASE, 10n ** 18n), value: "0", expect: "pass" });
+writeFileSync(".sail/probes-approve-base-v3.json", JSON.stringify(base3, null, 2));
+console.log("wrote .sail/probes-approve-base-v3.json (" + base3.length + " probes)");
+
+// ── Robinhood approve: USDG + CRCL to the router and the SpokePool ────────────────────────────
+const rh = [];
+const radd = (label, target, calldata, expect, value = "0") => rh.push({ label, target, calldata, value, expect });
+radd("approve USDG to SwapRouter02", USDG_RH, approve(ROUTER_RH, 500_000_000), "pass");
+radd("approve USDG to Across SpokePool (return leg)", USDG_RH, approve(SPOKE_RH, 500_000_000), "pass");
+radd("approve CRCL to SwapRouter02 (sell leg)", CRCL_RH, approve(ROUTER_RH, 10n ** 18n), "pass");
+radd("approve uncapped (max uint256)", USDG_RH, approve(ROUTER_RH, MAX), "pass");
+radd("wrong selector (transfer)", USDG_RH, transfer(RANDOM, 500_000_000), "fail");
+radd("native value attached", USDG_RH, approve(ROUTER_RH, 500_000_000), "fail", "1");
+radd("unlisted token", RANDOM, approve(ROUTER_RH, 500_000_000), "fail");
+radd("unlisted spender", USDG_RH, approve(RANDOM, 500_000_000), "fail");
+radd("wrong-chain spender (Base SpokePool)", USDG_RH, approve(SPOKE_BASE, 500_000_000), "fail");
+writeFileSync(".sail/probes-approve-robinhood.json", JSON.stringify(rh, null, 2));
+console.log("wrote .sail/probes-approve-robinhood.json (" + rh.length + " probes)");

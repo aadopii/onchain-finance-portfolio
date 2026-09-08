@@ -27,6 +27,9 @@ const USDT = "0xdAC17F958D2ee523a2206206994597C13D831ec7"; // Ethereum hub for Z
 const ZAMA = "0xa12cc123ba206d4031d1c7f6223d1c2ec249f4f3";
 const RANDOM = "0x1111111111111111111111111111111111111111";
 const ACCOUNT = "0xF516aEdbA31c6E5E581Ab45D6dc6F2aA29f536eA";
+const ROUTER_RH = "0xcaf681a66d020601342297493863e78c959e5cb2"; // Uniswap v3 SwapRouter02 on Robinhood Chain
+const USDG_RH = "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168";
+const CRCL_RH = "0xdF0992E440dD0be65BD8439b609d6D4366bf1CB5";
 
 function pathBytes(parts) {
   let hex = "0x";
@@ -140,3 +143,18 @@ e3("ZAMA buy with zero minOut", ROUTER_CLASSIC, exactInput(twoHop(USDC_ETH, 500,
 e3("ZAMA buy to wrong recipient", ROUTER_CLASSIC, exactInput(twoHop(USDC_ETH, 500, USDT, 500, ZAMA), RANDOM, 50_000_000, 1), "fail");
 writeFileSync(".sail/probes-swap-eth-v3.json", JSON.stringify(eth3, null, 2));
 console.log("wrote .sail/probes-swap-eth-v3.json (" + eth3.length + " probes)");
+
+// ── Robinhood Chain (USDG settlement; CRCL via SwapRouter02 exactInputSingle, fee 3000) ────────
+const rh = [];
+const radd = (label, target, calldata, expect, value = "0") => rh.push({ label, target, calldata, value, expect });
+radd("buy CRCL with USDG (fee 3000)", ROUTER_RH, exactInputSingle(USDG_RH, 3000, CRCL_RH, ACCOUNT, 200_000_000, 1), "pass");
+radd("sell CRCL back to USDG (exit)", ROUTER_RH, exactInputSingle(CRCL_RH, 3000, USDG_RH, ACCOUNT, 10n ** 18n, 1), "pass");
+radd("buy CRCL at cap (1000 USDG)", ROUTER_RH, exactInputSingle(USDG_RH, 3000, CRCL_RH, ACCOUNT, 1_000_000_000, 1), "pass");
+radd("over-cap buy (1001 USDG)", ROUTER_RH, exactInputSingle(USDG_RH, 3000, CRCL_RH, ACCOUNT, 1_001_000_000, 1), "fail");
+radd("wrong router", RANDOM, exactInputSingle(USDG_RH, 3000, CRCL_RH, ACCOUNT, 200_000_000, 1), "fail");
+radd("wrong recipient", ROUTER_RH, exactInputSingle(USDG_RH, 3000, CRCL_RH, RANDOM, 200_000_000, 1), "fail");
+radd("unlisted tokenOut", ROUTER_RH, exactInputSingle(USDG_RH, 3000, RANDOM, ACCOUNT, 200_000_000, 1), "fail");
+radd("zero minOut", ROUTER_RH, exactInputSingle(USDG_RH, 3000, CRCL_RH, ACCOUNT, 200_000_000, 0), "fail");
+radd("native value", ROUTER_RH, exactInputSingle(USDG_RH, 3000, CRCL_RH, ACCOUNT, 200_000_000, 1), "fail", "1");
+writeFileSync(".sail/probes-swap-robinhood.json", JSON.stringify(rh, null, 2));
+console.log("wrote .sail/probes-swap-robinhood.json (" + rh.length + " probes)");
