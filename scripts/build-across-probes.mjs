@@ -34,7 +34,7 @@ function set(spoke, inTok, outTok, dest, label) {
   add(`${label}: 200 → 199.7 (14.6 bps fee), quoted now, 2h deadline`, dep(base), "pass");
   add(`${label}: at cap 1000 → floor 997 (30 bps)`, dep({ ...base, inputAmount: 1_000_000_000, outputAmount: 997_000_000 }), "pass");
   add(`${label}: quote 59 min old`, dep({ ...base, quote: now - 3540 }), "pass");
-  add(`${label}: fill deadline 6h`, dep({ ...base, deadline: now + 21600 }), "pass");
+  add(`${label}: fill deadline near the 6h max`, dep({ ...base, deadline: now + 21600 - 120 }), "pass"); // margin: the block clock moves between generation and simulation
   // Must-fail
   add(`${label}: recipient not the SMA`, dep({ ...base, recipient: RANDOM }), "fail");
   add(`${label}: depositor not the SMA (refund would leave the SMA)`, dep({ ...base, depositor: RANDOM }), "fail");
