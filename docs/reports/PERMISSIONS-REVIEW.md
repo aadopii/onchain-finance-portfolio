@@ -182,3 +182,27 @@ narrowed to **±5pp** on 2026-09-07 (option 1 below, applied). cbHYPE sits ~5.1p
 Either way, register v3 first: until then the ZAMA buy is denied by the kernel (the merged runtime
 records it as a failed trade and retries each tick, so nothing is lost, but USDC would sit on
 Ethereum).
+
+---
+
+## 4. 2026-09-08 — Robinhood Chain and the Across routes
+
+CRCL (Circle, as a Robinhood stock token) joined the basket at 20%. Robinhood Chain (4663) settles in
+USDG (Paxos, 6 decimals) and CCTP does not reach it, so the agent bridges there and back with
+**Across** (`depositV3`, relayer-filled in seconds, refunded to the depositor if unfilled), bounded by
+a new `AcrossBridgePermission` per direction. Both SpokePools are upgradeable proxies administered from
+the Ethereum HubPool, whose owner is a 3-of-N Gnosis Safe (`0xB524…3715`); the per-tx cap bounds that
+residual. Registered and simulated (every must-fail probe proven to reject):
+
+| Chain | Permission | Address | Registered |
+|---|---|---|---|
+| Base | AcrossBridgePermission (USDC → USDG, dest 4663) | `0x6a90Fe9a29f1a66a7F3DB997B92f82b7F160EC41` | tx `0x74ddbeff…` |
+| Base | BoundedErc20Approve v3 (adds the SpokePool as spender; v2 `0xB9CA…9D8` revoked, tx `0x10ef884a…`) | `0x46520565634ad7E0D6f332C4eC17177e275a5e3c` | tx `0x74ddbeff…` |
+| Robinhood | ExactInputSwapPermission (USDG ↔ CRCL, SwapRouter02) | `0x34d9783d636eE686B9b92854B231CCDf6aE48C9b` | tx `0xba8eabf9…` |
+| Robinhood | BoundedErc20Approve (USDG, CRCL → router, SpokePool) | `0x4E7bC6FC4f1Fa9f5d0F0460bFaE9F8e670914948` | tx `0xba8eabf9…` |
+| Robinhood | AcrossBridgePermission (USDG → USDC, dest 8453) | `0xCC739fDaa582FAB80947E40b97E4c5120F601541` | tx `0xba8eabf9…` |
+
+Live set: Base bridge + swap v2 + approve v3 + Across; Ethereum bridge + swap v3 + approve v3;
+Robinhood swap + approve + Across. Both Across routes are named in `.sail/portfolio.json`, which is
+what switches them on. Manager wallet balances after the fees: Base ~0.0002 ETH, Ethereum ~0.0016 ETH,
+Robinhood ~0.0003 ETH — top up Base before the next deposit is invested.
