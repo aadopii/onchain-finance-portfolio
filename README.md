@@ -44,7 +44,7 @@ Live state of the author's account on 2026-09-07, after the first full rebalance
 | MORPHO | 70.05 | $171.23 | 16.9% | 17.5% |
 | SKY | 2,515.53 | $171.51 | 17.0% | 17.5% |
 
-Portfolio value $1,010.30, all holdings inside the ±3pp band. Idle USDC is not shown because the
+Portfolio value $1,010.30, all holdings inside the ±10pp band. Idle USDC is not shown because the
 agent invests it on the next run. The numbers come from the local dashboard (see below), which
 reads amounts live from the chain and values from the agent's last tick.
 
@@ -208,7 +208,7 @@ transactions; the runner executes them and records the outcome. In order:
 3. **Value.** Read idle USDC on every chain, quote every holding through its own pool, and count USDC
    still in flight across a bridge as part of total value, so buys sized during a bridge window do
    not undershoot.
-4. **Trim.** Once a week, sell the excess of any holding more than 3 percentage points over target,
+4. **Trim.** Once a week, sell the excess of any holding more than 10 percentage points over target,
    back to USDC on its own chain.
 5. **Buy toward target**, in basket order. Each shortfall is bought with the idle USDC on a chain
    where the asset trades, sized to `min(shortfall, cash)`, against a shared per-chain budget so one
@@ -308,7 +308,7 @@ bridging to Ethereum for SKY and ZAMA.
 
 **Change the weights.** Edit `basket.json` and `.sail/portfolio.json` (the runtime reads the latter;
 the former is the published source of truth), keep the weights summing to 1.0, and run `npm run
-settle`. A holding that ends up more than 3pp over target is trimmed on the next weekly rebalance;
+settle`. A holding that ends up more than 10pp over target is trimmed on the next weekly rebalance;
 buys toward target happen on every run. Adding a token that is not in the swap permission's
 allowlist means redeploying that permission with the new token, which is one more signature.
 

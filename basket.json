@@ -147,7 +147,7 @@
       ]
     }
   ],
-  "rebalanceBandBps": 300,
+  "rebalanceBandBps": 1000,
   "rebalancePeriodSec": 604800,
   "maxSlippageBps": 100,
   "report": {
