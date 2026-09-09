@@ -7,6 +7,7 @@
 .sail/runtime/
 .sail/state/
 .sail/account.json
+.sail/portfolio.json
 .sail/mandate.json
 .sail/activity.jsonl
 .sail/agent.log

@@ -206,3 +206,44 @@ Live set: Base bridge + swap v2 + approve v3 + Across; Ethereum bridge + swap v3
 Robinhood swap + approve + Across. Both Across routes are named in `.sail/portfolio.json`, which is
 what switches them on. Manager wallet balances after the fees: Base ~0.0002 ETH, Ethereum ~0.0016 ETH,
 Robinhood ~0.0003 ETH — top up Base before the next deposit is invested.
+
+---
+
+## 5. 2026-09-09 — swap permission offset check
+
+**Finding (high).** The `ExactInputSwapPermission` source that produced the three live swap
+permissions — swap v2 on Base (`0x2b70…449A`), swap v3 on Ethereum (`0x132A…dAAf`) and the
+Robinhood swap permission (row above) — reads every `exactInput` field by fixed calldata slot
+without checking that the ABI head offsets are the canonical ones (slot 0 == `0x20`, path offset
+== `0xa0`) or that the padded path is the last thing in the calldata. A compromised agent wallet
+could therefore place a compliant decoy tuple at the fixed slots and point the outer offset at a
+second tuple appended after the path: the permission evaluates the decoy, the router decodes the
+appended tuple, and the swap goes to another recipient or another token. The on-chain bound the
+mandate relies on (recipient pinned to the Safe, tokens allowlisted, per-buy cap) does not hold
+for that call shape. No such call has been observed on this account.
+
+**Fixed in source.** `contracts/mandates/ExactInputSwapPermission.sol` on this branch rejects a
+non-canonical outer or path offset and requires the calldata length to equal exactly
+`PATH_START + padded(pathLen)`. `contracts/test/ExactInputSwapPermission.t.sol` adds the negative
+cases (non-canonical offsets, decoy tuple with a second tuple appended, trailing bytes on single-
+and two-hop paths) and proves the raw encoding used by the probes matches the canonical one.
+`exactInputSingle` is unaffected (flat tuple, no dynamic field).
+
+**Action required (the deployed permissions still carry the old check):**
+
+1. Redeploy the three swap permissions from the fixed source with `sailor mandate deploy`
+   (`--args-file` from the same `.sail/args-swap-*.json` used for the current ones).
+2. Rebuild the probes with `scripts/build-swap-probes.mjs` (it now takes the SMA from `--sma`,
+   `SMA_ADDRESS` or `.sail/account.json`) and run `sailor mandate simulate` against each new
+   address — every must-fail probe, including the new offset/length ones, must reject.
+3. `sailor mandate register` the three, re-sign the mandate, then revoke the old swap v2 (Base),
+   swap v3 (Ethereum) and Robinhood swap permissions.
+
+The approve permissions also changed shape in source (`BoundedErc20Approve` now takes a per-token
+cap array, `0` still meaning uncapped); the deployed uncapped ones remain valid and need no action
+from this finding.
+
+**Band inconsistency.** Section 3 records the rebalance band as narrowed to ±5pp on 2026-09-07,
+but the README and the shipped config describe ±10pp. Current config value: `basket.json`
+`rebalanceBandBps: 1000` (±10pp); `.sail/portfolio.json` is regenerated from it at onboarding.
+

@@ -5,6 +5,7 @@
 // Timestamps are taken from `now`, so regenerate right before `sailor mandate simulate`.
 import { encodeFunctionData, parseAbi } from "viem";
 import { writeFileSync } from "node:fs";
+import { resolveSma } from "./resolve-sma.mjs";
 
 const DEPOSIT_V3 = parseAbi([
   "function depositV3(address depositor, address recipient, address inputToken, address outputToken, uint256 inputAmount, uint256 outputAmount, uint256 destinationChainId, address exclusiveRelayer, uint32 quoteTimestamp, uint32 fillDeadline, uint32 exclusivityDeadline, bytes message) payable",
@@ -13,7 +14,7 @@ const SPOKE_BASE = "0x09aea4b2242abC8bb4BB78D537A67a245A7bEC64";
 const SPOKE_RH = "0xD29C85F15DF544bA632C9E25829fd29d767d7978";
 const USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const USDG_RH = "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168";
-const ACCOUNT = "0xF516aEdbA31c6E5E581Ab45D6dc6F2aA29f536eA";
+const ACCOUNT = resolveSma(); // --sma <address> | SMA_ADDRESS | .sail/account.json
 const RANDOM = "0x1111111111111111111111111111111111111111";
 const ZERO = "0x0000000000000000000000000000000000000000";
 const now = Math.floor(Date.now() / 1000);

@@ -1,5 +1,5 @@
 {
-  "name": "portfolio-agent",
+  "name": "onchain-finance-portfolio",
   "version": "0.1.0",
   "description": "Sailor portfolio agent: DCA + rebalance a weighted token basket toward global target weights across chains",
   "type": "module",

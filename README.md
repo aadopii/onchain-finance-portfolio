@@ -206,7 +206,7 @@ enforced on-chain, not by the agent being well-behaved.
 
 | Permission | What it allows | What it refuses |
 |---|---|---|
-| `ExactInputSwapPermission` | Uniswap V3 and Aerodrome swaps, USDC in and basket tokens out, or the reverse, with the Safe as recipient, up to 1,000 USDC per buy | Any other router, token, recipient or selector; zero min-out; native value |
+| `ExactInputSwapPermission` | Uniswap V3 and Aerodrome swaps, USDC in and basket tokens out, or the reverse, with the Safe as recipient, up to 1,000 USDC per buy, canonical ABI offsets and exact length | Any other router, token, recipient or selector; zero min-out; native value |
 | `BoundedErc20Approve` | `approve()` on USDC and basket tokens to the routers and the CCTP messenger | Any other spender, token or function |
 | `CctpBridgePermission` | `depositForBurn` of USDC, up to 1,000 USDC, to Base or Ethereum, mint recipient pinned to the Safe's own address; `receiveMessage` to complete a mint | Any other token, destination or recipient |
 | `AcrossBridgePermission` | `depositV3` on the Across SpokePool: USDC on Base to USDG on Robinhood Chain and back, depositor and recipient pinned to the Safe, up to 1,000 per transaction, output at least 99.7% of input, fresh quote, deadline within 6 hours, empty message | Any other token, chain, recipient, relayer exclusivity, or any cross-chain message |
@@ -284,8 +284,8 @@ Onboarding walks five stations:
    probe sets (must-pass and must-fail calls, off-chain, no gas), then register them on your Safe.
    Each deploy and the registration are signatures in the browser; the protocol charges a small
    registration fee per permission, paid by the agent wallet.
-4. **Build.** The runtime is already here. `npm test` runs 45 tests; `forge test` in `contracts/`
-   runs 61.
+4. **Build.** The runtime is already here. `npm test` runs 64 tests; `forge test` in `contracts/`
+   runs 94.
 5. **Run.** Fund the agent wallet with a little ETH on each chain for gas, deposit USDC to your Safe
    on Base, and:
 

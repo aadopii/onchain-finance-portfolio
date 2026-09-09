@@ -5,51 +5,54 @@ import {IPermission, Context} from "@sail/interfaces/IPermission.sol";
 import {SailCalldata} from "./SailCalldata.sol";
 
 /// @title BoundedErc20Approve
-/// @notice Bounds a standalone ERC-20 `approve(spender, amount)` call, so the agent can grant its
-///         own router/messenger allowance (the agent-managed approve model) without an owner
-///         signature. Multi-token: one instance covers every token the agent must approve on a
-///         chain (USDC for the buy/bridge legs, each basket token for its sell leg).
+/// @notice Bounds a standalone ERC-20 `approve()` call. This is the agent-managed approve model:
+///         the agent grants its own router/messenger allowance instead of the owner signing a
+///         standing approve on the Safe. It is registered alongside the swap/bridge permissions.
 ///
 /// ENFORCES ON-CHAIN (kernel calls evaluate() on every dispatch; false ⇒ dispatch blocked):
-///   approve(address spender, uint256 amount)  selector 0x095ea7b3
-///     • ctx.target ∈ tokens      (the ERC-20 being approved — USDC or a basket token)
-///     • spender ∈ spenders       (the swap routers / CCTP messenger this mandate trusts)
-///     • ctx.value == 0           (approve never carries native value)
-///     • amount ≤ MAX_APPROVAL    (0 == uncapped — see note below)
+///   approve(address,uint256)  selector 0x095ea7b3
+///     • ctx.target ∈ tokens (the ERC-20 being approved — USDC, or a basket token on its sell leg)
+///     • spender ∈ spenders (the routers / CCTP messengers this mandate already trusts)
+///     • amount ≤ maxApproval[token] (per-(token) approve cap, in that token's base units;
+///       0 == uncapped)
+///     • ctx.value == 0 (approve never carries native value)
 ///
 /// AGENT-ENFORCED / NOT BOUNDED HERE (off-chain — can change without redeploying this contract):
-///   • How much it approves on a given tick (the runtime approves the exact trade amount).
-///   • When it re-approves.
+///   • how often the agent re-approves, and to what amount within the cap
+///   • which of the allowlisted (token, spender) pairs it approves on a given tick
+///   • a cumulative ceiling across many approves — this bounds each approve, not their sum
+///     (the sum is bounded by the swap/bridge permissions' own per-tx caps)
 ///
-/// MAX_APPROVAL == 0 means the approve amount is uncapped. The agent-managed model relies on the
-/// swap/bridge permissions for the real bounds: each swap's `amountIn` is capped by the swap
-/// permission, the recipient is pinned to the SMA, and the min-out floor is enforced. An uncapped
-/// approve does not widen any single trade — it only removes the cumulative-allowance ceiling that
-/// the owner-set model provides. Set MAX_APPROVAL non-zero to re-add a per-approve ceiling if a
-/// finite standing exposure is preferred.
+/// NOTE: allowlists and per-token caps are constructor-fixed. Changing them means redeploying
+///       + re-registering. Caps are in each token's OWN base units, so a 6-decimal USDC and an
+///       18-decimal token each get their own entry (a single shared number would mis-size one).
 contract BoundedErc20Approve is IPermission {
     bytes32 private constant DISCRIMINATOR = keccak256("BoundedErc20Approve");
     bytes4 private constant APPROVE_SELECTOR = 0x095ea7b3; // approve(address,uint256)
 
     mapping(address => bool) public isAllowedToken;
     mapping(address => bool) public isAllowedSpender;
-    uint256 public immutable MAX_APPROVAL; // 0 == uncapped
+    mapping(address => uint256) public maxApproval; // 0 == uncapped for that token
 
-    constructor(address[] memory tokens, address[] memory spenders, uint256 maxApproval) {
-        for (uint256 i = 0; i < tokens.length; i++) isAllowedToken[tokens[i]] = true;
+    constructor(address[] memory tokens, address[] memory spenders, uint256[] memory maxApprovals) {
+        require(tokens.length == maxApprovals.length, "BoundedErc20Approve: length mismatch");
+        for (uint256 i = 0; i < tokens.length; i++) {
+            isAllowedToken[tokens[i]] = true;
+            maxApproval[tokens[i]] = maxApprovals[i];
+        }
         for (uint256 i = 0; i < spenders.length; i++) isAllowedSpender[spenders[i]] = true;
-        MAX_APPROVAL = maxApproval;
     }
 
     function evaluate(bytes calldata txData, Context calldata ctx) external view returns (bool) {
+        if (!isAllowedToken[ctx.target]) return false;
         if (ctx.selector != APPROVE_SELECTOR) return false;
         if (ctx.value != 0) return false;
-        if (!isAllowedToken[ctx.target]) return false;
         if (!SailCalldata.hasParams(txData, 2)) return false;
         address spender = SailCalldata.asAddress(txData, 0);
         uint256 amount = SailCalldata.asUint256(txData, 1);
         if (!isAllowedSpender[spender]) return false;
-        if (MAX_APPROVAL != 0 && amount > MAX_APPROVAL) return false;
+        uint256 cap = maxApproval[ctx.target];
+        if (cap != 0 && amount > cap) return false;
         return true;
     }
 
