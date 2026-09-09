@@ -189,10 +189,29 @@ distinct report state so a silent 3pp drift is visible.
 
 ## Resolution — fixes applied and verified in this project
 
-Bugs 3 and 4 were fixed in `src/agent.ts` (partial buys + shared spend budget);
-Bug 1 and Bug 2 are documented above but require upstream changes to the Sailor
-runtime's valuation and ledger-confirmation logic, so they remain open in this
-project. `npm run typecheck` and `npm test` (32/32) both pass after the fix.
+All four bugs are fixed in the runtime (`src/agent.ts`, `src/report.ts`), verified by
+`npm run typecheck` and `npm test` (64/64) on 2026-09-09:
+
+- **Bug 1 — in-flight capital invisible to valuation.** `pendingBridgeUsd()` sums the USDC
+  burned on a source chain and not yet minted on its destination (the ledger's confirmed
+  `bridged` entries whose mint has not landed) and the snapshot adds it to `totalValue` as
+  `pendingBridgeUsdc`, so a bridge in flight no longer reads as a loss and no longer triggers a
+  phantom trim.
+- **Bug 2 — reverted swaps recorded as bought.** A buy/sell is written to the ledger as a
+  pending *trade intent* and becomes a confirmed `bought`/`sold` only when the runner's
+  `dispatch_executed` entry (with its tx hash) shows up in `.sail/activity.jsonl`; a
+  reverted, denied or errored dispatch becomes a `tradeFailed` marker (no cost-basis entry),
+  and the next tick re-quotes and retries with adaptive slippage.
+- **Bug 3 — all-or-nothing buys.** Every buy is sized at `min(shortfall, remaining budget)`,
+  so partial idle cash still moves every laggard toward target (the same rule applies to
+  the bridge reserve).
+- **Bug 4 — per-token fresh balance reads.** The USDC balance per chain is read once at the
+  start of the tick into a shared per-chain spend budget that every buy and bridge leg
+  decrements, so a tick can never dispatch more than it holds.
+- **Added on the same review — unpriced holdings pause trading.** If a basket token's pool
+  gives no quote, its value (and every weight) is unknown; the holding is reported as
+  `unpriced` and every trim and buy is paused for that tick instead of acting on a wrong
+  weight.
 
 Final allocation after the fixes and a $10 top-up (total value $1,009.40):
 

@@ -24,13 +24,12 @@ is deployed" vs "no SMA found").
 
 ## Pre-defined basket (themed blueprints)
 
-When the project root carries a `basket.json` (this blueprint does: the Onchain Finance Portfolio —
-cbHYPE, UNI, AAVE, MORPHO, SKY, ZAMA), the basket is **given, not elicited**. Skip the asset and
-weight questions in Act 2: read `basket.json`, present the basket and its weights once for
-confirmation, still run the SMA-first and chain checks, and derive `.sail/portfolio.json` from it —
-`basket.json` plus the deployment-specific `bridge.permission` map (the registered
-`CctpBridgePermission` address per chain) once Station 3 has registered it. The user may edit the
-weights before confirming; the thesis behind the basket is in the project README.
+When the project root carries a `basket.json`, the basket is **given, not elicited**: a themed
+blueprint ships its assets, weights, chains and routes there. Skip the asset and weight questions in
+Act 2: read `basket.json`, present the basket and its weights once for confirmation, still run the
+SMA-first and chain checks, and derive `.sail/portfolio.json` from it — `basket.json` plus the
+deployment-specific `bridge.permission` map (the registered `CctpBridgePermission` address per chain)
+once Station 3 has registered it. The user may edit the weights before confirming.
 
 ## What this owns
 
@@ -168,8 +167,13 @@ decisions.
 ### Act 3 — CONFIRM
 
 Render the full spec (basket, chains, funding plan, band, routing policy), walk the completeness
-gate, get explicit confirmation, then write `.sail/strategies/<name>.md` with the portfolio envelope and
-derive `.sail/portfolio.json` from it (see `references/portfolio-config.md`). Disclose before approval, each
+gate, get explicit confirmation, then write three things in this order: `basket.json` at the project
+root (the confirmed basket in machine form — assets, weights, chains, routes, band, cadence; the one
+file that encodes the user's thesis, and the file every portfolio agent ships with),
+`.sail/strategies/<name>.md` with the portfolio envelope, and `.sail/portfolio.json` derived from
+`basket.json` plus the deployment-specific `bridge.permission` map (see
+`references/portfolio-config.md`). Fill the "Your portfolio" table in `README.md` from the same
+basket, one line of the user's own reasoning per asset — never a recommendation of yours. Disclose before approval, each
 only when it applies: the bespoke bridge permission, approve coverage, that trading is triggered by
 the agent's code rather than enforced on-chain, and any risk that crosses a bound the user set
 (report via `sailor-risk`, never recommend).

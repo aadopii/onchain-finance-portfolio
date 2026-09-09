@@ -3,6 +3,7 @@
 // Uses viem to encode both call shapes. Emits .sail/probes-swap-{base,eth}.json.
 import { encodeFunctionData, parseAbi } from "viem";
 import { writeFileSync } from "node:fs";
+import { resolveSma } from "./resolve-sma.mjs";
 
 const EXACT_INPUT = parseAbi([
   "function exactInput((bytes path, address recipient, uint256 deadline, uint256 amountIn, uint256 amountOutMinimum) params) payable returns (uint256 amountOut)",
@@ -26,7 +27,7 @@ const WETH = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
 const USDT = "0xdAC17F958D2ee523a2206206994597C13D831ec7"; // Ethereum hub for ZAMA (v3)
 const ZAMA = "0xa12cc123ba206d4031d1c7f6223d1c2ec249f4f3";
 const RANDOM = "0x1111111111111111111111111111111111111111";
-const ACCOUNT = "0xF516aEdbA31c6E5E581Ab45D6dc6F2aA29f536eA";
+const ACCOUNT = resolveSma(); // --sma <address> | SMA_ADDRESS | .sail/account.json
 const ROUTER_RH = "0xcaf681a66d020601342297493863e78c959e5cb2"; // Uniswap v3 SwapRouter02 on Robinhood Chain
 const USDG_RH = "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168";
 const CRCL_RH = "0xdF0992E440dD0be65BD8439b609d6D4366bf1CB5";

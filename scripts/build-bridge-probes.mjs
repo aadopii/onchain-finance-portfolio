@@ -1,6 +1,7 @@
 // Build simulate probes for CctpBridgePermission. Flat params, no tuple.
 import { encodeFunctionData, parseAbi } from "viem";
 import { writeFileSync } from "node:fs";
+import { resolveSma } from "./resolve-sma.mjs";
 
 const DEPOSIT_FOR_BURN = parseAbi([
   "function depositForBurn(uint256 amount, uint32 destinationDomain, bytes32 mintRecipient, address burnToken) returns (uint64 nonce)",
@@ -9,7 +10,7 @@ const RECEIVE_MESSAGE = parseAbi([
   "function receiveMessage(bytes message, bytes attestation) returns (bool success)",
 ]);
 
-const ACCOUNT = "0xF516aEdbA31c6E5E581Ab45D6dc6F2aA29f536eA";
+const ACCOUNT = resolveSma(); // --sma <address> | SMA_ADDRESS | .sail/account.json
 // Base
 const MESSENGER_BASE = "0x1682Ae6375C4E4A97e4B583BC394c861A46D8962";
 const TRANSMITTER_BASE = "0xAD09780d193884d503182aD4588450C416D6F9D4";
