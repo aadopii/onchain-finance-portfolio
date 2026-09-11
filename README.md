@@ -35,22 +35,7 @@ asset's liquidity lives.
 | Yield | SKY | 14% | Ethereum | The stablecoin issuer; the closest thing onchain to net interest margin |
 | Privacy | ZAMA | 4% | Ethereum | The confidentiality layer institutions will need; venture-sized |
 
-CRCL and the new weights were added on 2026-09-08. The agent buys toward them from new deposits;
-nothing is sold to make room, because the moves are inside the ±10pp band. Live state of the
-author's account on 2026-09-07, before that change:
-
-| Asset | Amount | Value | Weight | Target |
-|---|---|---|---|---|
-| ZAMA | 991.99 | $50.42 | 5.0% | 5.0% |
-| cbHYPE | 2.9731 | $252.39 | 25.0% | 25.0% |
-| UNI | 27.91 | $189.15 | 18.7% | 17.5% |
-| AAVE | 1.3311 | $174.99 | 17.3% | 17.5% |
-| MORPHO | 70.05 | $171.23 | 16.9% | 17.5% |
-| SKY | 2,515.53 | $171.51 | 17.0% | 17.5% |
-
-Portfolio value $1,010.30, all holdings inside the ±10pp band; CRCL at 0% is the position the next
-deposits fund. Idle USDC is not shown because the agent invests it on the next run. The numbers come from the local dashboard (see below), which
-reads amounts live from the chain and values from the agent's last tick.
+The target basket includes CRCL. Actual weights move with prices and deposits; inspect your own dashboard for current holdings. The dashboard combines live token amounts with the agent's last valuation snapshot, so it is not a live market-price feed.
 
 The basket is one file, [`basket.json`](basket.json). Everything else in the repository exists to
 hold it safely.
@@ -362,8 +347,8 @@ all three gone the agent can do nothing at all, and your assets are still in you
   keys, and stock-token liquidity that follows market hours. That is venue risk on a 20% sleeve.
 - **Gas.** The manager wallet pays gas on both chains and the registration fees. `sailor doctor`
   flags it when it runs low; an empty wallet stalls a leg, it never loses funds.
-- **A reverted swap.** Recorded as failed, never as bought; the next tick retries with a slightly
-  wider slippage floor, up to +3pp.
+- **A reverted swap.** Recorded as failed, never as bought; the next tick retries within the same
+  configured slippage maximum.
 - **A compromised manager key.** The attacker can trade inside the mandate: sell holdings to USDC at
   bad prices into thin pools. They cannot move anything out of the Safe. Revoke and rotate.
 
@@ -401,3 +386,11 @@ Fees, revenue, TVL, stablecoin supply: [DefiLlama](https://defillama.com) · Pri
 
 This describes one portfolio and the reasoning behind it. It is not investment advice, and the
 author holds every asset listed.
+
+## Runtime and permission upgrades
+
+Use Sailor 2.3 or later. Retry slippage stays within `maxSlippageBps`; missing prices pause buys and trims. The settle wrapper permits one running instance. Transaction outcomes are matched by dispatch ID and recorded once.
+
+The dashboard estimates each holding using a one-token sell quote multiplied by its balance. It is not a full-position liquidation quote. The quote slippage cap is enforced by runtime sizing, not by an oracle in the bespoke permission.
+
+Existing deployments of the older `ExactInputSwapPermission` must replace their registered permission contracts: build and test, deploy, simulate valid and invalid calls, register the replacement, and revoke the old address. Updating this repository does not update immutable on-chain code. Keep the old strategy paused until migration completes.

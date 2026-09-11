@@ -130,7 +130,7 @@
           "WETH": "0x4200000000000000000000000000000000000006"
         },
         "deployedBy": "0xB01dCE443d052e44b7D13726c0EC9fFB7f5815B6",
-        "tx": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "tx": "0x3ca0d7232b623afda5e53c6d2319f4c3bbdc00a28b924c9f1d994bd3abfc2b3c",
         "deployedAt": "2026-06-30",
         "verified": "https://uniscan.xyz/address/0x9d84c11626d13c5dc9540fa12a3ff7b85ac3c1b9",
         "source": "sailor-templates/oracles/UniV3TwapOracle.sol",

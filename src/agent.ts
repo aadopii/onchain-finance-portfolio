@@ -35,6 +35,7 @@ import {
   buildReportContext,
   buildSnapshot,
   composeReport,
+  readSnapshot,
   sendTelegramReport,
   shouldRun,
   writeSnapshot,
@@ -599,29 +600,9 @@ function nextOpId(): string {
   return `op-${readLines(ledgerPath()).length + 1}`;
 }
 
-/** Consecutive trailing `tradeFailed` entries for a symbol since its last confirmed trade. */
-function recentFailures(symbol: string): number {
-  const lines = readLines(ledgerPath());
-  let n = 0;
-  for (let i = lines.length - 1; i >= 0; i--) {
-    let e: { kind?: string; symbol?: string };
-    try {
-      e = JSON.parse(lines[i]) as { kind?: string; symbol?: string };
-    } catch {
-      continue;
-    }
-    if (e.kind === "tradeFailed" && e.symbol === symbol) {
-      n++;
-      continue;
-    }
-    if ((e.kind === "bought" || e.kind === "sold") && e.symbol === symbol) break;
-  }
-  return n;
-}
-
-/** Widen the slippage floor by a few bps per consecutive revert, capped at +3pp. */
-function effectiveSlippageBps(cfg: PortfolioConfig, symbol: string): number {
-  return Math.min(cfg.maxSlippageBps + recentFailures(symbol) * 25, cfg.maxSlippageBps + 300);
+/** Retries preserve the operator's configured maximum slippage. */
+function effectiveSlippageBps(cfg: PortfolioConfig, _symbol: string): number {
+  return cfg.maxSlippageBps;
 }
 
 /** The activity outcome kinds that terminate a dispatch (everything else is a pre-execution marker). */
@@ -637,13 +618,14 @@ const TERMINAL_OUTCOMES = new Set([
  *
  * A pending buy/sell becomes a confirmed `bought`/`sold` only when a `dispatch_executed`
  * record matches; a reverted/denied/errored dispatch becomes a `tradeFailed` marker (no
- * cost-basis entry), so the next tick re-quotes and retries with adaptive slippage. Matching
+ * cost-basis entry), so the next tick re-quotes and retries within the configured slippage cap. Matching
  * is monotonic because the runner writes activity records in the same order it executes the
  * dispatches the tick returned, which is the order the intents were appended.
  */
 function reconcileTrades(nowSec: number): void {
   const resolved = new Set<string>();
   const claimedTx = new Set<string>();
+  const claimedOutcomes = new Set<string>();
   const pending: PendingTrade[] = [];
 
   for (const line of readLines(ledgerPath())) {
@@ -687,6 +669,7 @@ function reconcileTrades(nowSec: number): void {
       e.kind === "bridgeFailed"
     ) {
       resolved.add(String(e.id ?? ""));
+      if (e.outcomeKey) claimedOutcomes.add(String(e.outcomeKey));
       const tx = String(e.txHash ?? "").toLowerCase();
       if (tx) claimedTx.add(tx);
     }
@@ -696,25 +679,27 @@ function reconcileTrades(nowSec: number): void {
   if (unresolved.length === 0) return;
 
   const activity = readActivity();
-  let cursor = 0;
   for (const p of unresolved) {
     let hit: Record<string, unknown> | null = null;
-    while (cursor < activity.length) {
-      const a = activity[cursor];
-      cursor++;
+    for (const a of activity) {
+      const outcomeKey = keccak256(new TextEncoder().encode(JSON.stringify(a)));
+      if (claimedOutcomes.has(outcomeKey)) continue;
+      if (a.dispatchId && a.dispatchId !== p.id) continue;
       if (!TERMINAL_OUTCOMES.has(String(a.type ?? ""))) continue;
       if (Number(a.chainId) !== p.chainId) continue;
       if (String(a.target ?? "").toLowerCase() !== p.target) continue;
       // An outcome recorded before the intent existed belongs to an earlier tick (a project
       // with history has many old router dispatches) — it can never confirm this intent.
       const aTs = Date.parse(String(a.ts ?? ""));
-      if (Number.isFinite(aTs) && aTs < (p.ts - 300) * 1000) continue;
+      if (!Number.isFinite(aTs) || aTs < p.ts * 1000) continue;
       const tx = String(a.txHash ?? "").toLowerCase();
       if (tx && claimedTx.has(tx)) continue;
       hit = a;
       break;
     }
     if (!hit) continue;
+    const outcomeKey = keccak256(new TextEncoder().encode(JSON.stringify(hit)));
+    claimedOutcomes.add(outcomeKey);
     const txHash = String(hit.txHash ?? "");
     claimedTx.add(txHash.toLowerCase());
     if (p.side === "bridge") {
@@ -735,6 +720,7 @@ function reconcileTrades(nowSec: number): void {
               target: p.target,
               outputAmount: p.outputAmount,
               txHash,
+              outcomeKey,
             }
           : {
               ts: nowSec,
@@ -745,6 +731,7 @@ function reconcileTrades(nowSec: number): void {
               amount: p.amount.toString(),
               symbols: p.symbols,
               txHash,
+              outcomeKey,
             },
       );
       continue;
@@ -757,6 +744,7 @@ function reconcileTrades(nowSec: number): void {
         symbol: p.symbol,
         amount: p.amount.toString(),
         txHash,
+        outcomeKey,
       });
     } else {
       appendLedger({
@@ -767,6 +755,7 @@ function reconcileTrades(nowSec: number): void {
         symbol: p.symbol,
         amount: p.amount.toString(),
         txHash,
+        outcomeKey,
       });
     }
   }
@@ -1012,12 +1001,17 @@ async function swap(
   };
 }
 
-/** Settlement-currency-denominated value of the SMA's holding of a token on one chain (base units). */
+/**
+ * Settlement-currency-denominated value of the SMA's holding of a token on one chain (base units).
+ * Returns null when the SMA holds the token but its pool gives no quote: the value is UNKNOWN,
+ * not zero. A zero here would read as "under-allocated" and trigger a buy up to the cap, and
+ * inflate every sibling's weight into a spurious trim — so the caller must pause instead.
+ */
 export async function usdcValueOf(
   ctx: AgentContext,
   cfg: PortfolioConfig,
   spec: ChainToken,
-): Promise<bigint> {
+): Promise<bigint | null> {
   const balance = await ctx.chain(spec.chainId).read.balance(spec.address);
   if (balance === 0n) return 0n;
   const settlement = settlementOf(cfg, spec.chainId);
@@ -1031,7 +1025,7 @@ export async function usdcValueOf(
     settlement.address,
     oneUnit,
   );
-  if (perToken === null) return 0n; // unpriceable holding: fail closed, value 0
+  if (perToken === null) return null; // unpriceable holding: unknown, never 0
   // `perToken` is in the chain's settlement native units; normalize to the 6-decimal base.
   return (balance * toBase(perToken, settlement)) / oneUnit;
 }
@@ -1562,19 +1556,47 @@ export const agent: Agent = {
       usdcTotal += base;
     }
 
-    const entries: { token: BasketToken; value: bigint; weightBps: bigint; targetBps: bigint }[] =
-      [];
+    // A holding whose pool gives no quote has an UNKNOWN value. Its last known value (from the
+    // previous snapshot) is carried into the display so the report never shows a false drop,
+    // and every trim and buy is paused this tick: with one value unknown, every weight and
+    // every shortfall is unreliable, so no rebalance decision is safe.
+    const prevSnapshot = readSnapshot();
+    const unpriced: string[] = [];
+    const entries: {
+      token: BasketToken;
+      value: bigint;
+      unknown: boolean;
+      weightBps: bigint;
+      targetBps: bigint;
+    }[] = [];
     for (const token of cfg.basket) {
       let value = 0n;
+      let unknown = false;
       for (const spec of token.chains) {
-        value += await usdcValueOf(ctx, cfg, spec);
+        const v = await usdcValueOf(ctx, cfg, spec);
+        if (v === null) {
+          unknown = true;
+          break;
+        }
+        value += v;
+      }
+      if (unknown) {
+        unpriced.push(token.symbol);
+        value = prevSnapshot?.holdings.find((h) => h.symbol === token.symbol)?.value ?? 0n;
       }
       entries.push({
         token,
         value,
+        unknown,
         weightBps: 0n,
         targetBps: BigInt(Math.round(token.weight * 10_000)),
       });
+    }
+    const tradingPaused = unpriced.length > 0;
+    if (tradingPaused) {
+      ctx.log(
+        `could not price ${unpriced.join(", ")} (no quote from its pool) — value unknown, so every trim and buy is paused this tick; check the token's pool or route if this persists`,
+      );
     }
 
     const investedValue = entries.reduce((a, e) => a + e.value, 0n);
@@ -1582,7 +1604,7 @@ export const agent: Agent = {
     // sized during the flight window undershoot target by the in-flight amount.
     const pendingBridge = pendingBridgeUsd();
     const totalValue = usdcTotal + investedValue + pendingBridge;
-    if (totalValue === 0n) {
+    if (totalValue === 0n && !tradingPaused) {
       ctx.log("portfolio empty — skipping");
       appendLedger({
         ts: ctx.timestamp,
@@ -1608,7 +1630,8 @@ export const agent: Agent = {
     //    band back to USDC. The USDC this raises is invested on a later tick. Trimming
     //    follows the rebalance cadence (rebalancePeriodSec); buying toward target stays
     //    continuous so deposits are invested promptly.
-    const rebalanceDue = shouldRun(ctx.timestamp, lastRebalanceTs(), cfg.rebalancePeriodSec ?? 0);
+    const rebalanceDue =
+      !tradingPaused && shouldRun(ctx.timestamp, lastRebalanceTs(), cfg.rebalancePeriodSec ?? 0);
     if (rebalanceDue) {
       let sold = false;
       for (const e of entries) {
@@ -1654,10 +1677,12 @@ export const agent: Agent = {
           dispatches.push(res.dispatch);
           if (res.kind === "swap") {
             const router = routerFor(cfg, chainId, spec);
+            const dispatchId = nextOpId();
+            Object.assign(res.dispatch, { dispatchId });
             appendLedger({
               ts: ctx.timestamp,
               kind: "trade",
-              id: nextOpId(),
+              id: dispatchId,
               side: "sell",
               symbol: e.token.symbol,
               amount: toBase(proceeds, settlement).toString(),
@@ -1684,7 +1709,10 @@ export const agent: Agent = {
       string,
       { source: number; dest: number; amount: bigint; symbols: string[] }
     >();
-    for (const e of entries) {
+    // Paused (an unpriced holding): no buys at all — the unpriced token must not be bought, and
+    // every other token's shortfall is measured against a total that is itself unknown.
+    const buyCandidates = tradingPaused ? [] : entries;
+    for (const e of buyCandidates) {
       let buyUsd: bigint;
       if (dca) {
         if (dcaDue) {
@@ -1725,10 +1753,12 @@ export const agent: Agent = {
           dispatches.push(res.dispatch);
           if (res.kind === "swap") {
             const router = routerFor(cfg, chainId, spec);
+            const dispatchId = nextOpId();
+            Object.assign(res.dispatch, { dispatchId });
             appendLedger({
               ts: ctx.timestamp,
               kind: "trade",
-              id: nextOpId(),
+              id: dispatchId,
               side: "buy",
               symbol: e.token.symbol,
               amount: buyUsd.toString(),
@@ -1796,11 +1826,13 @@ export const agent: Agent = {
       if (res) {
         dispatches.push(res.dispatch);
         if (res.kind === "bridge") {
+          const dispatchId = nextOpId();
+          Object.assign(res.dispatch, { dispatchId });
           // Intent only — `bridged` is written by reconcileTrades once the burn/deposit confirms.
           appendLedger({
             ts: ctx.timestamp,
             kind: "bridge",
-            id: nextOpId(),
+            id: dispatchId,
             via: res.via,
             source,
             dest,
@@ -1824,6 +1856,7 @@ export const agent: Agent = {
         symbol: e.token.symbol,
         value: e.value,
         targetBps: e.targetBps,
+        unknown: e.unknown,
       })),
       bandBps: cfg.rebalanceBandBps,
       costBasis: invested - sold,
@@ -1853,8 +1886,9 @@ export const agent: Agent = {
       }
     }
 
-    // Record the cadence so the next periodic buy waits a full period.
-    if (dca && dcaDue) {
+    // Record the cadence so the next periodic buy waits a full period. A paused tick made no
+    // periodic buy, so it stays due for the next one.
+    if (dca && dcaDue && !tradingPaused) {
       appendLedger({ ts: ctx.timestamp, kind: "invested" });
     }
 
@@ -1863,7 +1897,7 @@ export const agent: Agent = {
         ts: ctx.timestamp,
         block: Number(ctx.blockNumber),
         kind: "skipped",
-        reason: "nothing actionable",
+        reason: tradingPaused ? `unpriced: ${unpriced.join(",")}` : "nothing actionable",
       });
     } else {
       ctx.log(`dispatching ${dispatches.length} call(s)`);
