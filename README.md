@@ -9,6 +9,34 @@ controls. Built on
 One sentence: **onchain finance is undervalued as a sector, so hold the category leader of every
 vertical a financial system needs, and let a machine keep the weights honest.**
 
+## Start in Claude Code or Codex
+
+Use **Node.js 22+**. Run this in your terminal, or ask your coding agent to run it. No repository clone or global Sailor installation is needed.
+
+```bash
+npx @sail.money/sailor@latest harbor create onchain-finance-portfolio my-onchain-portfolio --no-agent
+```
+
+Accept the npm installation prompt and review the blueprint import when prompted. Use a new folder name if the destination already exists. Sailor downloads the blueprint, verifies it, installs dependencies, and checks the project. `--no-agent` stops it from launching a second coding-agent session.
+
+**Next:** open the generated folder in Claude Code or Codex, then send:
+
+> Read AGENTS.md and guide me through setting up this portfolio agent.
+
+The coding agent helps you install Foundry, configure an RPC endpoint for each required chain, connect your owner wallet, confirm the strategy, and sign its permissions. It explains gas and registration costs before you fund or sign. Creating the project does not start trading.
+
+### Launch a coding agent from a standalone terminal
+
+If you want Sailor to launch the coding-agent CLI for you, omit `--no-agent`. The selected CLI must already be installed and on your PATH. For example:
+
+```bash
+# Codex
+npx @sail.money/sailor@latest harbor create onchain-finance-portfolio my-onchain-portfolio
+
+# Or Claude Code (choose this instead)
+npx @sail.money/sailor@latest harbor create onchain-finance-portfolio my-onchain-portfolio --agent claude
+```
+
 - [The portfolio today](#the-portfolio-today)
 - [The thesis](#the-thesis)
 - [How the agent works](#how-the-agent-works)
@@ -248,15 +276,7 @@ Telegram report's deposit-versus-market split honest.
 
 ## Run it yourself
 
-You need Node 22+, [Foundry](https://book.getfoundry.sh/getting-started/installation), an RPC
-endpoint for Base and one for Ethereum (a free Alchemy or Infura key is enough), and a wallet you
-control for the owner signatures. Sailor runs the whole onboarding.
-
-```bash
-npm install -g @sail.money/sailor@dev
-sailor harbor create onchain-finance-portfolio my-portfolio
-cd my-portfolio
-```
+Start with the [Claude Code or Codex quickstart](#start-in-claude-code-or-codex) above. Continue in the generated project folder.
 
 Onboarding walks five stations:
 
@@ -269,8 +289,7 @@ Onboarding walks five stations:
    probe sets (must-pass and must-fail calls, off-chain, no gas), then register them on your Safe.
    Each deploy and the registration are signatures in the browser; the protocol charges a small
    registration fee per permission, paid by the agent wallet.
-4. **Build.** The runtime is already here. `npm test` runs 45 tests; `forge test` in `contracts/`
-   runs 61.
+4. **Build.** The runtime is already here. Run `npm test` and `npm run typecheck`, then `forge test` in `contracts/`.
 5. **Run.** Fund the agent wallet with a little ETH on each chain for gas, deposit USDC to your Safe
    on Base, and:
 
