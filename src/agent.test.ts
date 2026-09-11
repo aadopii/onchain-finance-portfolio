@@ -366,6 +366,8 @@ function makeCtx(
       string,
       { status: string; to?: string; logs?: { address: string; topics: string[] }[] }
     >;
+    /** Mock: token addresses whose quote reverts (no pool / thin liquidity) — every path touching them fails. */
+    unpriceable?: string[];
   } = {},
 ) {
   const balances = opts.balances ?? {};
@@ -383,9 +385,12 @@ function makeCtx(
       publicClient: {
         // 1:1 price: echo the input amount back as the output amount. Multi-hop quote
         // args are [path, amountIn], so the amount is args[1].
-        simulateContract: async ({ args }: { args: unknown[] }) => ({
-          result: [args[1], 0n, 0, 0n],
-        }),
+        simulateContract: async ({ args }: { args: unknown[] }) => {
+          const pathHex = String(args[0]).toLowerCase();
+          if (opts.unpriceable?.some((a) => pathHex.includes(a.slice(2).toLowerCase())))
+            throw new Error("quote reverted");
+          return { result: [args[1], 0n, 0, 0n] };
+        },
         // usedNonces(bytes32) on the CCTP MessageTransmitter: 1 once the mint landed.
         readContract: async ({ functionName }: { functionName: string }) =>
           functionName === "usedNonces" ? (opts.mintLanded ? 1n : 0n) : 0n,
@@ -1077,9 +1082,9 @@ test("records minted only once the destination transmitter has consumed the nonc
   }
 });
 
-test("reverted swap is not recorded as bought and widens slippage on retry (Bug 2)", async () => {
+test("reverted swap is not recorded as bought and preserves the slippage cap on retry (Bug 2)", async () => {
   // A pending buy whose dispatch_reverted must NOT become a `bought` (cost basis stays clean)
-  // and the next attempt must widen the slippage floor.
+  // and the next attempt must preserve the slippage floor.
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "portfolio-revert-test-"));
   fs.mkdirSync(path.join(dir, ".sail", "memory"), { recursive: true });
   fs.mkdirSync(path.join(dir, ".sail"), { recursive: true });
@@ -1117,15 +1122,15 @@ test("reverted swap is not recorded as bought and widens slippage on retry (Bug 
     // The reverted intent was resolved as a failure, never a bought.
     assert.ok(ledger.includes('"tradeFailed"'));
     assert.ok(!ledger.includes('"bought"'));
-    // The retry queued a fresh buy, with a widened slippage floor (100 + 25 = 125 bps).
+    // The retry queued a fresh buy, with the configured slippage floor (100 bps).
     assert.ok(dispatches.length >= 1);
     const retry = dispatches.find(
       (d) => d.calls[0].target.toLowerCase() === ROUTER_BASE.toLowerCase(),
     );
     assert.ok(retry);
     const a = swapArgs(retry.calls[0]);
-    // Mock quotes 1:1, so amountOutMinimum = amountIn * (1 − 125/10000).
-    assert.equal(a.amountOutMinimum, (a.amountIn * 9875n) / 10_000n);
+    // Mock quotes 1:1, so amountOutMinimum = amountIn * (1 − 100/10000).
+    assert.equal(a.amountOutMinimum, (a.amountIn * 9900n) / 10_000n);
   } finally {
     process.chdir(prev);
     fs.rmSync(dir, { recursive: true, force: true });
@@ -1555,6 +1560,235 @@ test("an expired Across deposit is recorded as refunded and stops counting as in
       fs.readFileSync(path.join(dir, ".sail", "state", "snapshot.json"), "utf-8"),
     );
     assert.equal(snap.pendingBridgeUsdc, "0");
+  } finally {
+    process.chdir(prev);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("an unpriceable holding pauses every trim and buy and is reported as unpriced, not $0", async () => {
+  // WETH $40 / WBTC $110 with $50 idle: WBTC is overweight (a trim is due) and WETH is under
+  // target (a buy is due). When WBTC's pool gives no quote its value is UNKNOWN — a 0 would read
+  // as "WBTC under-allocated" and both buy WBTC up to the cap and trim WETH on inflated weights.
+  const balances = {
+    [`8453:${USDC_BASE}`]: 50_000_000n,
+    [`8453:${WETH_BASE}`]: 40_000_000n,
+    [`8453:${WBTC_BASE}`]: 110_000_000n,
+  };
+  // Control: with every holding priced, this exact portfolio trades.
+  const control = await run(twoTokenConfig(), makeCtx({ timestamp: T0, balances }));
+  assert.ok(control.length > 0);
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "portfolio-unpriced-test-"));
+  fs.mkdirSync(path.join(dir, ".sail", "state"), { recursive: true });
+  fs.writeFileSync(path.join(dir, ".sail", "portfolio.json"), JSON.stringify(twoTokenConfig()));
+  // The previous tick priced WBTC at $105 — the last known value the snapshot must carry.
+  fs.writeFileSync(
+    path.join(dir, ".sail", "state", "snapshot.json"),
+    JSON.stringify({
+      totalValue: "195000000",
+      investedValue: "145000000",
+      idleUsdc: "50000000",
+      pendingBridgeUsdc: "0",
+      costBasis: null,
+      holdings: [
+        {
+          symbol: "WETH",
+          value: "40000000",
+          weightBps: "2051",
+          targetBps: "4000",
+          status: "buy",
+          driftBps: "-1949",
+        },
+        {
+          symbol: "WBTC",
+          value: "105000000",
+          weightBps: "5384",
+          targetBps: "6000",
+          status: "buy",
+          driftBps: "-616",
+        },
+      ],
+    }),
+  );
+  const prev = process.cwd();
+  process.chdir(dir);
+  try {
+    const dispatches = await agent.tick(
+      makeCtx({ timestamp: T0, balances, unpriceable: [WBTC_BASE] }),
+    );
+    assert.equal(dispatches.length, 0); // no WBTC trim, no WBTC buy, no WETH buy
+
+    const snap = JSON.parse(
+      fs.readFileSync(path.join(dir, ".sail", "state", "snapshot.json"), "utf-8"),
+    );
+    const wbtc = snap.holdings.find((h: { symbol: string }) => h.symbol === "WBTC");
+    assert.equal(wbtc.unknown, true);
+    assert.equal(wbtc.status, "unpriced");
+    assert.equal(wbtc.value, "105000000"); // last known, never 0
+    const weth = snap.holdings.find((h: { symbol: string }) => h.symbol === "WETH");
+    assert.equal(weth.unknown, undefined);
+
+    const ledger = fs
+      .readFileSync(path.join(dir, ".sail", "memory", "ledger.jsonl"), "utf-8")
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l));
+    const last = ledger[ledger.length - 1];
+    assert.equal(last.kind, "skipped");
+    assert.ok(String(last.reason).includes("WBTC"));
+    assert.ok(!ledger.some((e) => e.kind === "trade" || e.kind === "rebalanced"));
+  } finally {
+    process.chdir(prev);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("an unpriceable holding with no previous snapshot is still not treated as an empty portfolio", async () => {
+  // First ever tick and the only holding cannot be quoted: no prior value to carry, but the
+  // SMA does hold the token, so the tick must pause (not "portfolio empty") and record why.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "portfolio-unpriced-first-test-"));
+  fs.mkdirSync(path.join(dir, ".sail"), { recursive: true });
+  fs.writeFileSync(path.join(dir, ".sail", "portfolio.json"), JSON.stringify(twoTokenConfig()));
+  const prev = process.cwd();
+  process.chdir(dir);
+  try {
+    const dispatches = await agent.tick(
+      makeCtx({
+        timestamp: T0,
+        balances: { [`8453:${WBTC_BASE}`]: 110_000_000n, [`8453:${USDC_BASE}`]: 50_000_000n },
+        unpriceable: [WBTC_BASE],
+      }),
+    );
+    assert.equal(dispatches.length, 0);
+    const snap = JSON.parse(
+      fs.readFileSync(path.join(dir, ".sail", "state", "snapshot.json"), "utf-8"),
+    );
+    assert.equal(snap.holdings.find((h: { symbol: string }) => h.symbol === "WBTC").unknown, true);
+    const lines = fs
+      .readFileSync(path.join(dir, ".sail", "memory", "ledger.jsonl"), "utf-8")
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l));
+    assert.equal(lines[lines.length - 1].reason, "unpriced: WBTC");
+  } finally {
+    process.chdir(prev);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+test("review: stale error must not override later confirmed buy", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "review-ledger-"));
+  fs.mkdirSync(path.join(dir, ".sail", "memory"), { recursive: true });
+  fs.writeFileSync(path.join(dir, ".sail", "portfolio.json"), JSON.stringify(twoTokenConfig()));
+  const ts = T0 - 60;
+  fs.writeFileSync(
+    path.join(dir, ".sail", "memory", "ledger.jsonl"),
+    `${JSON.stringify({
+      ts,
+      kind: "trade",
+      id: "review-buy",
+      side: "buy",
+      symbol: "WETH",
+      amount: "400000000",
+      chainId: 8453,
+      target: ROUTER_BASE.toLowerCase(),
+    })}\n`,
+  );
+  fs.writeFileSync(
+    path.join(dir, ".sail", "activity.jsonl"),
+    `${[
+      {
+        ts: new Date((ts - 30) * 1000).toISOString(),
+        type: "error",
+        target: ROUTER_BASE,
+        chainId: 8453,
+      },
+      {
+        ts: new Date((ts + 2) * 1000).toISOString(),
+        type: "dispatch_executed",
+        target: ROUTER_BASE,
+        chainId: 8453,
+        txHash: `0x${"ab".repeat(32)}`,
+      },
+    ]
+      .map((e) => JSON.stringify(e))
+      .join("\n")}\n`,
+  );
+  const prev = process.cwd();
+  process.chdir(dir);
+  try {
+    await agent.tick(makeCtx({ timestamp: T0, balances: {} }));
+    const rows = fs
+      .readFileSync(path.join(dir, ".sail", "memory", "ledger.jsonl"), "utf8")
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l));
+    assert.ok(
+      rows.some((e) => e.id === "review-buy" && e.kind === "bought"),
+      "confirmed buy was not recognized",
+    );
+  } finally {
+    process.chdir(prev);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("reconciliation consumes failures once and matches dispatch ids out of order", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "portfolio-outcomes-"));
+  fs.mkdirSync(path.join(dir, ".sail", "memory"), { recursive: true });
+  fs.writeFileSync(path.join(dir, ".sail", "portfolio.json"), JSON.stringify(twoTokenConfig()));
+  const intent = (id: string) => ({
+    ts: T0 - 60,
+    kind: "trade",
+    id,
+    side: "buy",
+    symbol: "WETH",
+    amount: "100",
+    chainId: 8453,
+    target: ROUTER_BASE.toLowerCase(),
+  });
+  const outcomes = [
+    {
+      ts: new Date((T0 - 50) * 1000).toISOString(),
+      type: "error",
+      chainId: 8453,
+      target: ROUTER_BASE,
+      dispatchId: "first",
+    },
+    {
+      ts: new Date((T0 - 40) * 1000).toISOString(),
+      type: "dispatch_executed",
+      chainId: 8453,
+      target: ROUTER_BASE,
+      dispatchId: "second",
+      txHash: `0x${"bc".repeat(32)}`,
+    },
+  ];
+  fs.writeFileSync(
+    path.join(dir, ".sail", "memory", "ledger.jsonl"),
+    `${[intent("second"), intent("first")].map((e) => JSON.stringify(e)).join("\n")}\n`,
+  );
+  fs.writeFileSync(
+    path.join(dir, ".sail", "activity.jsonl"),
+    `${outcomes.map((e) => JSON.stringify(e)).join("\n")}\n`,
+  );
+  const prev = process.cwd();
+  process.chdir(dir);
+  try {
+    await agent.tick(makeCtx({ timestamp: T0, balances: {} }));
+    fs.appendFileSync(
+      path.join(dir, ".sail", "memory", "ledger.jsonl"),
+      `${JSON.stringify(intent("third"))}\n`,
+    );
+    await agent.tick(makeCtx({ timestamp: T0 + 1, balances: {} }));
+    const rows = fs
+      .readFileSync(path.join(dir, ".sail", "memory", "ledger.jsonl"), "utf8")
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l));
+    assert.equal(rows.filter((e) => e.id === "second" && e.kind === "bought").length, 1);
+    assert.equal(rows.filter((e) => e.id === "first" && e.kind === "tradeFailed").length, 1);
+    assert.equal(rows.filter((e) => e.id === "third" && e.kind === "tradeFailed").length, 0);
   } finally {
     process.chdir(prev);
     fs.rmSync(dir, { recursive: true, force: true });
